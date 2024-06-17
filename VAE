@@ -1,0 +1,70 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+class CVAE(nn.Module):
+    def __init__(self, ts_input_dim, tab_input_dim, latent_dim, hidden_dim, seq_len):
+        super(CVAE, self).__init__()
+        self.seq_len = seq_len
+
+        # Encoder for time series data
+        self.encoder_lstm = nn.LSTM(ts_input_dim, hidden_dim, batch_first=True)
+        self.fc_mu = nn.Linear(hidden_dim, latent_dim)
+        self.fc_logvar = nn.Linear(hidden_dim, latent_dim)
+
+        # Conditioning network for tabular data
+        self.condition_fc = nn.Sequential(
+            nn.Linear(tab_input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, latent_dim)
+        )
+
+        # Decoder
+        self.decoder_fc = nn.Sequential(
+            nn.Linear(latent_dim * 2, hidden_dim),
+            nn.ReLU()
+        )
+        self.decoder_lstm = nn.LSTM(hidden_dim, hidden_dim, batch_first=True)
+        self.output_fc = nn.Linear(hidden_dim, ts_input_dim)
+
+    def encode(self, ts_data):
+        _, (hidden, _) = self.encoder_lstm(ts_data)
+        hidden = hidden.squeeze(0)
+        mu = self.fc_mu(hidden)
+        logvar = self.fc_logvar(hidden)
+        return mu, logvar
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def decode(self, z):
+        z = self.decoder_fc(z)
+        z = z.unsqueeze(1).repeat(1, self.seq_len, 1)
+        decoded, _ = self.decoder_lstm(z)
+        decoded = self.output_fc(decoded)
+        return decoded
+
+    def forward(self, ts_data, tab_data):
+        mu, logvar = self.encode(ts_data)
+        z_ts = self.reparameterize(mu, logvar)
+        z_tab = self.condition_fc(tab_data)
+        z = torch.cat((z_ts, z_tab), dim=1)
+        return self.decode(z), mu, logvar
+
+# Example usage
+ts_input_dim = 10  # Example input dimension for time series data
+tab_input_dim = 5  # Example input dimension for tabular data
+latent_dim = 20    # Latent space dimension
+hidden_dim = 64    # Hidden layer dimension
+seq_len = 30       # Length of the time series sequence
+
+model = CVAE(ts_input_dim, tab_input_dim, latent_dim, hidden_dim, seq_len)
+criterion = nn.MSELoss()
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+def loss_function(recon_x, x, mu, logvar):
+    BCE = criterion(recon_x, x)
+    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    return BCE + KLD
