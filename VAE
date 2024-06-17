@@ -1,4 +1,109 @@
+class SyntheticDataset(Dataset):
+    def __init__(self, num_samples, seq_len, ts_input_dim, tab_input_dim):
+        super(SyntheticDataset, self).__init__()
+        self.num_samples = num_samples
+        self.seq_len = seq_len
+        self.ts_input_dim = ts_input_dim
+        self.tab_input_dim = tab_input_dim
+        self.time_series_data, self.tabular_data = self.generate_data()
+
+    def generate_data(self):
+        time_series_data = np.random.rand(self.num_samples, self.seq_len, self.ts_input_dim)
+        tabular_data = np.random.rand(self.num_samples, self.tab_input_dim)
+        return time_series_data, tabular_data
+
+    def __len__(self):
+        return self.num_samples
+
+    def __getitem__(self, idx):
+        ts_data = torch.tensor(self.time_series_data[idx], dtype=torch.float32)
+        tab_data = torch.tensor(self.tabular_data[idx], dtype=torch.float32)
+        return ts_data, tab_data
+
+    def get_data(self):
+        return self.time_series_data, self.tabular_data
+import matplotlib.pyplot as plt
+
+# Function to visualize time series data
+def plot_time_series(data, title, num_samples=5):
+    fig, axs = plt.subplots(num_samples, 1, figsize=(12, num_samples * 2))
+    fig.suptitle(title, fontsize=16)
+    for i in range(num_samples):
+        axs[i].plot(data[i])
+        axs[i].set_title(f'Sample {i+1}')
+    plt.tight_layout()
+    plt.show()
+
+# Generate synthetic data
+num_samples = 1000
+seq_len = 30
+ts_input_dim = 10
+tab_input_dim = 5
+batch_size = 32
+
+dataset = SyntheticDataset(num_samples, seq_len, ts_input_dim, tab_input_dim)
+train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+# Plot original time series data
+original_ts_data, original_tab_data = dataset.get_data()
+plot_time_series(original_ts_data, "Original Time Series Data", num_samples=5)
+
+# Train the CVAE model
+latent_dim = 20
+hidden_dim = 64
+num_epochs = 50
+learning_rate = 0.001
+
+model = CVAE(ts_input_dim, tab_input_dim, latent_dim, hidden_dim, seq_len)
+criterion = nn.MSELoss()
+optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
+def loss_function(recon_x, x, mu, logvar):
+    BCE = criterion(recon_x, x)
+    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    return BCE + KLD
+
+for epoch in range(num_epochs):
+    model.train()
+    train_loss = 0
+    for ts_batch, tab_batch in train_loader:
+        optimizer.zero_grad()
+        recon_ts, mu, logvar = model(ts_batch, tab_batch)
+        loss = loss_function(recon_ts, ts_batch, mu, logvar)
+        loss.backward()
+        train_loss += loss.item()
+        optimizer.step()
+    if (epoch + 1) % 10 == 0:
+        print(f'Epoch {epoch+1}, Loss: {train_loss/len(train_loader)}')
+
+# Generate and visualize decoded data
+model.eval()
+with torch.no_grad():
+    decoded_ts_data = []
+    for ts_batch, tab_batch in train_loader:
+        recon_ts, mu, logvar = model(ts_batch, tab_batch)
+        decoded_ts_data.extend(recon_ts.numpy())
+        if len(decoded_ts_data) >= 5:
+            break
+    decoded_ts_data = np.array(decoded_ts_data)[:5]
+
+# Plot decoded time series data
+plot_time_series(decoded_ts_data, "Decoded Time Series Data", num_samples=5)
+
+
+
+
+
+
+
+
+
+
 import numpy as np
+
+
+
+
 import torch
 from torch.utils.data import DataLoader, Dataset
 
