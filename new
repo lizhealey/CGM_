@@ -1,0 +1,188 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import numpy as np
+import matplotlib.pyplot as plt
+from torch.utils.data import DataLoader, Dataset
+
+# Synthetic dataset class
+class SyntheticWaveDataset(Dataset):
+    def __init__(self, num_samples, seq_len, tab_input_dim):
+        super(SyntheticWaveDataset, self).__init__()
+        self.num_samples = num_samples
+        self.seq_len = seq_len
+        self.tab_input_dim = tab_input_dim
+        self.time_series_data, self.tabular_data = self.generate_data()
+
+    def generate_data(self):
+        tabular_data = np.random.rand(self.num_samples, self.tab_input_dim)
+        time_series_data = []
+        for i in range(self.num_samples):
+            phase_shift = np.sum(tabular_data[i]) * 2 * np.pi  # Use tabular data to influence phase shift
+            t = np.linspace(0, 4 * np.pi, self.seq_len)
+            wave = np.sin(t + phase_shift) + np.random.normal(0, 0.1, self.seq_len)
+            time_series_data.append(wave)
+        return np.array(time_series_data), tabular_data
+
+    def __len__(self):
+        return self.num_samples
+
+    def __getitem__(self, idx):
+        ts_data = torch.tensor(self.time_series_data[idx], dtype=torch.float32)
+        tab_data = torch.tensor(self.tabular_data[idx], dtype=torch.float32)
+        return ts_data, tab_data
+
+    def get_data(self):
+        return self.time_series_data, self.tabular_data
+
+# CVAE model class
+class CVAE(nn.Module):
+    def __init__(self, ts_input_dim, tab_input_dim, latent_dim, hidden_dim, seq_len):
+        super(CVAE, self).__init__()
+        self.seq_len = seq_len
+
+        # Encoder for time series data
+        self.encoder_lstm = nn.LSTM(ts_input_dim, hidden_dim, batch_first=True)
+        self.fc_mu = nn.Linear(hidden_dim, latent_dim)
+        self.fc_logvar = nn.Linear(hidden_dim, latent_dim)
+
+        # Conditioning network for tabular data
+        self.condition_fc = nn.Sequential(
+            nn.Linear(tab_input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, latent_dim)
+        )
+
+        # Decoder
+        self.decoder_fc = nn.Sequential(
+            nn.Linear(latent_dim * 2, hidden_dim),
+            nn.ReLU()
+        )
+        self.decoder_lstm = nn.LSTM(hidden_dim, hidden_dim, batch_first=True)
+        self.output_fc = nn.Linear(hidden_dim, ts_input_dim)
+
+    def encode(self, ts_data):
+        ts_data = ts_data.unsqueeze(-1)  # Add channel dimension
+        _, (hidden, _) = self.encoder_lstm(ts_data)
+        hidden = hidden.squeeze(0)
+        mu = self.fc_mu(hidden)
+        logvar = self.fc_logvar(hidden)
+        return mu, logvar
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def decode(self, z):
+        z = self.decoder_fc(z)
+        z = z.unsqueeze(1).repeat(1, self.seq_len, 1)
+        decoded, _ = self.decoder_lstm(z)
+        decoded = self.output_fc(decoded)
+        return decoded.squeeze(-1)  # Remove channel dimension
+
+    def forward(self, ts_data, tab_data):
+        mu, logvar = self.encode(ts_data)
+        z_ts = self.reparameterize(mu, logvar)
+        z_tab = self.condition_fc(tab_data)
+        z = torch.cat((z_ts, z_tab), dim=1)
+        return self.decode(z), mu, logvar
+
+# Training and data generation
+def train_and_generate():
+    # Hyperparameters
+    num_samples = 1000
+    seq_len = 30
+    ts_input_dim = 1
+    tab_input_dim = 5
+    batch_size = 32
+    latent_dim = 20
+    hidden_dim = 64
+    num_epochs = 50
+    learning_rate = 0.001
+
+    # Generate synthetic wave data
+    dataset = SyntheticWaveDataset(num_samples, seq_len, tab_input_dim)
+    train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    # Initialize model, loss function, and optimizer
+    model = CVAE(ts_input_dim, tab_input_dim, latent_dim, hidden_dim, seq_len)
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
+    # Loss function for VAE
+    def loss_function(recon_x, x, mu, logvar):
+        BCE = criterion(recon_x, x)
+        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        return BCE + KLD
+
+    # Training loop
+    for epoch in range(num_epochs):
+        model.train()
+        train_loss = 0
+        for ts_batch, tab_batch in train_loader:
+            optimizer.zero_grad()
+            recon_ts, mu, logvar = model(ts_batch, tab_batch)
+            loss = loss_function(recon_ts, ts_batch, mu, logvar)
+            loss.backward()
+            train_loss += loss.item()
+            optimizer.step()
+        if (epoch + 1) % 10 == 0:
+            print(f'Epoch {epoch+1}, Loss: {train_loss/len(train_loader)}')
+
+    print("Training completed.")
+
+    # Function to visualize time series data
+    def plot_time_series(data, title, num_samples=5):
+        fig, axs = plt.subplots(num_samples, 1, figsize=(12, num_samples * 2))
+        fig.suptitle(title, fontsize=16)
+        for i in range(num_samples):
+            axs[i].plot(data[i])
+            axs[i].set_title(f'Sample {i+1}')
+        plt.tight_layout()
+        plt.show()
+
+    # Plot original time series data
+    original_ts_data, original_tab_data = dataset.get_data()
+    plot_time_series(original_ts_data, "Original Time Series Data", num_samples=5)
+
+    # Generate and visualize decoded data
+    model.eval()
+    with torch.no_grad():
+        decoded_ts_data = []
+        for ts_batch, tab_batch in train_loader:
+            recon_ts, mu, logvar = model(ts_batch, tab_batch)
+            decoded_ts_data.extend(recon_ts.numpy())
+            if len(decoded_ts_data) >= 5:
+                break
+        decoded_ts_data = np.array(decoded_ts_data)[:5]
+
+    # Plot decoded time series data
+    plot_time_series(decoded_ts_data, "Decoded Time Series Data", num_samples=5)
+
+    # Example new tabular data
+    new_tab_data = torch.tensor(np.random.rand(1, tab_input_dim), dtype=torch.float32)
+
+    # Generate new time series data based on the new tabular input
+    def generate_time_series(model, tab_data, latent_dim):
+        model.eval()
+        with torch.no_grad():
+            # Encode the new tabular data
+            encoded_tab = model.condition_fc(tab_data)
+
+            # Sample from the latent space
+            z_sample = torch.randn(tab_data.size(0), latent_dim)
+
+            # Concatenate the sampled latent vector with the encoded tabular data
+            z = torch.cat((z_sample, encoded_tab), dim=1)
+
+            # Decode to generate the new time series data
+            generated_ts = model.decode(z)
+        return generated_ts.numpy()
+
+    generated_ts_data = generate_time_series(model, new_tab_data, latent_dim)
+
+    # Plot the generated time series data
+    plot_time_series(generated_ts_data, "Generated Time Series Data", num_samples=1)
+
+train_and_generate()
