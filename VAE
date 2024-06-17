@@ -1,4 +1,186 @@
+import numpy as np
 import torch
+from torch.utils.data import DataLoader, Dataset
+
+# Synthetic Dataset Class
+class SyntheticDataset(Dataset):
+    def __init__(self, num_samples, seq_len, ts_input_dim, tab_input_dim):
+        super(SyntheticDataset, self).__init__()
+        self.num_samples = num_samples
+        self.seq_len = seq_len
+        self.ts_input_dim = ts_input_dim
+        self.tab_input_dim = tab_input_dim
+        self.time_series_data, self.tabular_data = self.generate_data()
+
+    def generate_data(self):
+        time_series_data = np.random.rand(self.num_samples, self.seq_len, self.ts_input_dim)
+        tabular_data = np.random.rand(self.num_samples, self.tab_input_dim)
+        return time_series_data, tabular_data
+
+    def __len__(self):
+        return self.num_samples
+
+    def __getitem__(self, idx):
+        ts_data = torch.tensor(self.time_series_data[idx], dtype=torch.float32)
+        tab_data = torch.tensor(self.tabular_data[idx], dtype=torch.float32)
+        return ts_data, tab_data
+
+# Generate synthetic data
+num_samples = 1000
+seq_len = 30
+ts_input_dim = 10
+tab_input_dim = 5
+batch_size = 32
+
+dataset = SyntheticDataset(num_samples, seq_len, ts_input_dim, tab_input_dim)
+train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+class CVAE(nn.Module):
+    def __init__(self, ts_input_dim, tab_input_dim, latent_dim, hidden_dim, seq_len):
+        super(CVAE, self).__init__()
+        self.seq_len = seq_len
+
+        # Encoder for time series data
+        self.encoder_lstm = nn.LSTM(ts_input_dim, hidden_dim, batch_first=True)
+        self.fc_mu = nn.Linear(hidden_dim, latent_dim)
+        self.fc_logvar = nn.Linear(hidden_dim, latent_dim)
+
+        # Conditioning network for tabular data
+        self.condition_fc = nn.Sequential(
+            nn.Linear(tab_input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, latent_dim)
+        )
+
+        # Decoder
+        self.decoder_fc = nn.Sequential(
+            nn.Linear(latent_dim * 2, hidden_dim),
+            nn.ReLU()
+        )
+        self.decoder_lstm = nn.LSTM(hidden_dim, hidden_dim, batch_first=True)
+        self.output_fc = nn.Linear(hidden_dim, ts_input_dim)
+
+    def encode(self, ts_data):
+        _, (hidden, _) = self.encoder_lstm(ts_data)
+        hidden = hidden.squeeze(0)
+        mu = self.fc_mu(hidden)
+        logvar = self.fc_logvar(hidden)
+        return mu, logvar
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def decode(self, z):
+        z = self.decoder_fc(z)
+        z = z.unsqueeze(1).repeat(1, self.seq_len, 1)
+        decoded, _ = self.decoder_lstm(z)
+        decoded = self.output_fc(decoded)
+        return decoded
+
+    def forward(self, ts_data, tab_data):
+        mu, logvar = self.encode(ts_data)
+        z_ts = self.reparameterize(mu, logvar)
+        z_tab = self.condition_fc(tab_data)
+        z = torch.cat((z_ts, z_tab), dim=1)
+        return self.decode(z), mu, logvar
+
+
+# Hyperparameters
+latent_dim = 20    # Latent space dimension
+hidden_dim = 64    # Hidden layer dimension
+num_epochs = 100
+learning_rate = 0.001
+
+# Initialize model, loss function, and optimizer
+model = CVAE(ts_input_dim, tab_input_dim, latent_dim, hidden_dim, seq_len)
+criterion = nn.MSELoss()
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+# Loss function for VAE
+def loss_function(recon_x, x, mu, logvar):
+    BCE = criterion(recon_x, x)
+    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    return BCE + KLD
+
+# Training loop
+for epoch in range(num_epochs):
+    model.train()
+    train_loss = 0
+    for ts_batch, tab_batch in train_loader:
+        optimizer.zero_grad()
+        recon_ts, mu, logvar = model(ts_batch, tab_batch)
+        loss = loss_function(recon_ts, ts_batch, mu, logvar)
+        loss.backward()
+        train_loss += loss.item()
+        optimizer.step()
+    
+    print(f'Epoch {epoch+1}, Loss: {train_loss/len(train_loader)}')
+
+print("Training completed.")
+
+
+# Generate new time series data given new tabular data
+model.eval()
+with torch.no_grad():
+    new_tab_data = torch.tensor(np.random.rand(1, tab_input_dim), dtype=torch.float32)
+    # Sample from standard normal distribution for latent space
+    z_sample = torch.randn(1, latent_dim)
+    z_cond = torch.cat((z_sample, model.condition_fc(new_tab_data)), dim=1)
+    generated_ts = model.decode(z_cond)
+    print("Generated Time Series Data:", generated_ts)
+
+
+
+
+
+import numpy as np
+import torch
+from torch.utils.data import DataLoader, Dataset
+
+# Synthetic Dataset Class
+class SyntheticDataset(Dataset):
+    def __init__(self, num_samples, seq_len, ts_input_dim, tab_input_dim):
+        super(SyntheticDataset, self).__init__()
+        self.num_samples = num_samples
+        self.seq_len = seq_len
+        self.ts_input_dim = ts_input_dim
+        self.tab_input_dim = tab_input_dim
+        self.time_series_data, self.tabular_data = self.generate_data()
+
+    def generate_data(self):
+        time_series_data = np.random.rand(self.num_samples, self.seq_len, self.ts_input_dim)
+        tabular_data = np.random.rand(self.num_samples, self.tab_input_dim)
+        return time_series_data, tabular_data
+
+    def __len__(self):
+        return self.num_samples
+
+    def __getitem__(self, idx):
+        ts_data = torch.tensor(self.time_series_data[idx], dtype=torch.float32)
+        tab_data = torch.tensor(self.tabular_data[idx], dtype=torch.float32)
+        return ts_data, tab_data
+
+# Generate synthetic data
+num_samples = 1000
+seq_len = 30
+ts_input_dim = 10
+tab_input_dim = 5
+batch_size = 32
+
+dataset = SyntheticDataset(num_samples, seq_len, ts_input_dim, tab_input_dim)
+train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+
+
+
+
+
+
+
+import torch
+
 import torch.nn as nn
 import torch.optim as optim
 
