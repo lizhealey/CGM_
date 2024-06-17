@@ -1,4 +1,18 @@
     def generate_data(self):
+        tabular_data = np.random.rand(self.num_samples, self.tab_input_dim)
+        time_series_data = []
+        for i in range(self.num_samples):
+            phase_shifts = tabular_data[i] * 2 * np.pi  # Use tabular data to influence phase shifts
+            t = np.linspace(0, 4 * np.pi, self.seq_len)
+            waves = [np.sin(t + phase_shifts[j % self.tab_input_dim]) for j in range(self.ts_input_dim)]
+            wave_data = np.stack(waves, axis=-1) + np.random.normal(0, 0.1, (self.seq_len, self.ts_input_dim))
+            time_series_data.append(wave_data)
+        return np.array(time_series_data), tabular_data
+
+
+
+
+def generate_data(self):
         time_series_data = []
         for _ in range(self.num_samples):
             t = np.linspace(0, 4 * np.pi, self.seq_len)
