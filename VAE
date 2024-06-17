@@ -1,3 +1,16 @@
+    def generate_data(self):
+        time_series_data = []
+        for _ in range(self.num_samples):
+            t = np.linspace(0, 4 * np.pi, self.seq_len)
+            waves = [np.sin(t + np.random.uniform(0, 2 * np.pi)) for _ in range(self.ts_input_dim)]
+            wave_data = np.stack(waves, axis=-1) + np.random.normal(0, 0.1, (self.seq_len, self.ts_input_dim))
+            time_series_data.append(wave_data)
+        tabular_data = np.random.rand(self.num_samples, self.tab_input_dim)
+        return np.array(time_series_data), np.array(tabular_data)
+
+
+
+
 class SyntheticDataset(Dataset):
     def __init__(self, num_samples, seq_len, ts_input_dim, tab_input_dim):
         super(SyntheticDataset, self).__init__()
