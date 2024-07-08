@@ -18,6 +18,52 @@ Y = 3 * X1 + 2 * X2 + noise  # Outcome variable
 # Create a DataFrame
 data = pd.DataFrame({'X1': X1, 'X2': X2, 'Y': Y})
 
+# Fit multiple linear regression model
+X = data[['X1', 'X2']]
+X = sm.add_constant(X)  # Add constant term
+model = sm.OLS(data['Y'], X).fit()
+
+# Get the summary of the model
+summary = model.summary()
+print(summary)
+
+# Extract effect sizes (coefficients) and confidence intervals
+coefficients = model.params
+conf = model.conf_int()
+conf['Coefficient'] = coefficients
+conf.columns = ['2.5%', '97.5%', 'Coefficient']
+
+# Plot the effect sizes with confidence intervals
+plt.figure(figsize=(10, 6))
+sns.pointplot(x=conf.index, y='Coefficient', data=conf, join=False, color='black')
+plt.errorbar(conf.index, conf['Coefficient'], yerr=(conf['97.5%'] - conf['2.5%']) / 2, fmt='o', color='black')
+plt.title('Effect Sizes with Confidence Intervals')
+plt.xlabel('Variable')
+plt.ylabel('Effect Size')
+plt.grid(True)
+plt.show()
+
+
+
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Set random seed for reproducibility
+np.random.seed(42)
+
+# Generate toy data
+n_samples = 100
+X1 = np.random.normal(size=n_samples)
+X2 = 0.5 * X1 + np.random.normal(size=n_samples)  # Correlated with X1
+noise = np.random.normal(size=n_samples)
+Y = 3 * X1 + 2 * X2 + noise  # Outcome variable
+
+# Create a DataFrame
+data = pd.DataFrame({'X1': X1, 'X2': X2, 'Y': Y})
+
 # Fit multiple linear regression model to get residuals
 X = data[['X1', 'X2']]
 X = sm.add_constant(X)  # Add constant term
