@@ -1,3 +1,52 @@
+
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Set random seed for reproducibility
+np.random.seed(42)
+
+# Generate toy data
+n_samples = 100
+X1 = np.random.normal(size=n_samples)
+X2 = 0.5 * X1 + np.random.normal(size=n_samples)  # Correlated with X1
+noise = np.random.normal(size=n_samples)
+Y = 3 * X1 + 2 * X2 + noise  # Outcome variable
+
+# Create a DataFrame
+data = pd.DataFrame({'X1': X1, 'X2': X2, 'Y': Y})
+
+# Fit multiple linear regression model to get residuals
+X = data[['X1', 'X2']]
+X = sm.add_constant(X)  # Add constant term
+model = sm.OLS(data['Y'], X).fit()
+data['Y_residual'] = model.resid
+
+# Regress X2 on X1 to get residuals of X2
+model_X2_on_X1 = sm.OLS(data['X2'], sm.add_constant(data['X1'])).fit()
+data['X2_residual'] = model_X2_on_X1.resid
+
+# Plot residuals
+plt.figure(figsize=(10, 6))
+sns.regplot(x='X2_residual', y='Y_residual', data=data, ci=95, scatter_kws={"s": 50}, line_kws={"color": "red"})
+plt.title('Effect of X2 on Y after removing effect of X1')
+plt.xlabel('Residuals of X2 after removing effect of X1')
+plt.ylabel('Residuals of Y after removing effect of X1 and X2')
+plt.grid(True)
+plt.show()
+
+# Fit linear regression model on the residuals to get the effect size and confidence interval
+residual_model = sm.OLS(data['Y_residual'], sm.add_constant(data['X2_residual'])).fit()
+residual_summary = residual_model.summary()
+print(residual_summary)
+
+
+
+
+
+
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
