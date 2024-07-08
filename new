@@ -17,6 +17,75 @@ Y = 3 * X1 + 2 * X2 + noise  # Outcome variable
 # Create a DataFrame
 data = pd.DataFrame({'X1': X1, 'X2': X2, 'Y': Y})
 
+# Fit multiple linear regression model to get effect sizes and confidence intervals
+X = data[['X1', 'X2']]
+X = sm.add_constant(X)  # Add constant term
+model = sm.OLS(data['Y'], X).fit()
+
+# Extract effect sizes (coefficients) and confidence intervals
+coefficients = model.params
+conf = model.conf_int()
+conf['Coefficient'] = coefficients
+conf.columns = ['2.5%', '97.5%', 'Coefficient']
+conf.index = ['Intercept', 'X1', 'X2']
+
+# Remove the intercept
+conf = conf.loc[['X1', 'X2']]
+
+# Regress X2 on X1 to get residuals of X2
+model_X2_on_X1 = sm.OLS(data['X2'], sm.add_constant(data['X1'])).fit()
+data['X2_residual'] = model_X2_on_X1.resid
+
+# Regress Y on X1 to get residuals of Y
+model_Y_on_X1 = sm.OLS(data['Y'], sm.add_constant(data['X1'])).fit()
+data['Y_residual'] = model_Y_on_X1.resid
+
+# Regress residuals of Y on residuals of X2
+residual_model = sm.OLS(data['Y_residual'], sm.add_constant(data['X2_residual'])).fit()
+residual_coefficients = residual_model.params
+residual_conf = residual_model.conf_int()
+residual_conf['Coefficient'] = residual_coefficients
+residual_conf.columns = ['2.5%', '97.5%', 'Coefficient']
+residual_conf.index = ['Intercept', 'X2|X1']
+
+# Remove the intercept
+residual_conf = residual_conf.loc[['X2|X1']]
+
+# Combine the results
+combined_conf = pd.concat([conf, residual_conf])
+
+# Plot the effect sizes with confidence intervals
+plt.figure(figsize=(10, 6))
+sns.pointplot(x=combined_conf.index, y='Coefficient', data=combined_conf, join=False, color='black')
+plt.errorbar(combined_conf.index, combined_conf['Coefficient'], yerr=(combined_conf['97.5%'] - combined_conf['2.5%']) / 2, fmt='o', color='black')
+plt.title('Effect Sizes with Confidence Intervals')
+plt.xlabel('Variable')
+plt.ylabel('Effect Size')
+plt.grid(True)
+plt.show()
+
+
+
+
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Set random seed for reproducibility
+np.random.seed(42)
+
+# Generate toy data
+n_samples = 100
+X1 = np.random.normal(size=n_samples)
+X2 = 0.5 * X1 + np.random.normal(size=n_samples)  # Correlated with X1
+noise = np.random.normal(size=n_samples)
+Y = 3 * X1 + 2 * X2 + noise  # Outcome variable
+
+# Create a DataFrame
+data = pd.DataFrame({'X1': X1, 'X2': X2, 'Y': Y})
+
 # Fit multiple linear regression model
 X = data[['X1', 'X2']]
 X = sm.add_constant(X)  # Add constant term
