@@ -1,3 +1,56 @@
+
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
+import matplotlib.pyplot as plt
+
+# Set seed for reproducibility
+np.random.seed(42)
+
+# Generate toy data
+n_samples = 100
+X1 = np.random.normal(0, 1, n_samples) * 100  # Variable with large effect and large magnitude
+X2 = X1 + np.random.normal(0, 1, n_samples) * 10  # Highly correlated with X1
+X3 = np.random.normal(0, 1, n_samples) * 50
+X4 = np.random.normal(0, 1, n_samples) * 10
+X5 = np.random.normal(0, 1, n_samples) * 0.5
+
+# Generate outcome variable with X1 having a large effect
+Y = 10 * X1 + 2 * X2 + 0.5 * X3 + 1 * X4 + 0.1 * X5 + np.random.normal(0, 1, n_samples)
+
+# Create a DataFrame
+data = pd.DataFrame({'Y': Y, 'X1': X1, 'X2': X2, 'X3': X3, 'X4': X4, 'X5': X5})
+
+# Step 1: Regress X2 on Y and get the residuals
+X2_resid_model = sm.OLS(data['Y'], sm.add_constant(data[['X2']])).fit()
+data['Y_resid'] = X2_resid_model.resid
+
+# Step 2: Use the residuals as the new outcome variable in the analysis with X1
+X = data[['X1']]
+X = sm.add_constant(X)
+model_resid = sm.OLS(data['Y_resid'], X).fit()
+
+# Summary of the regression model
+summary_resid = model_resid.summary()
+print(summary_resid)
+
+# Plot the coefficients
+coef_resid = model_resid.params
+conf_resid = model_resid.conf_int()
+conf_resid['coef'] = coef_resid
+
+plt.figure(figsize=(10, 6))
+plt.errorbar(conf_resid.index, conf_resid['coef'], yerr=(conf_resid[1] - conf_resid[0]) / 2, fmt='o', capsize=5)
+plt.axhline(y=0, color='gray', linestyle='--')
+plt.xlabel('Variables')
+plt.ylabel('Coefficient')
+plt.title('Effect of X1 on Residualized Outcome')
+plt.show()
+
+
+
+
+
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 # Calculate VIF for each variable
