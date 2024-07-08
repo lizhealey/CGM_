@@ -1,3 +1,79 @@
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+
+# Calculate VIF for each variable
+X = data_standardized[['X1', 'X2', 'X3', 'X4', 'X5']]
+vif_data = pd.DataFrame()
+vif_data['Feature'] = X.columns
+vif_data['VIF'] = [variance_inflation_factor(X.values, i) for i in range(X.shape[1])]
+
+# Display VIF
+import ace_tools as tools; tools.display_dataframe_to_user(name="Variance Inflation Factors", dataframe=vif_data)
+vif_data
+
+
+
+from sklearn.preprocessing import MinMaxScaler
+
+# Normalize the features
+scaler = MinMaxScaler()
+normalized_features = scaler.fit_transform(data[['X1', 'X2', 'X3', 'X4', 'X5']])
+
+# Create a DataFrame with normalized features
+data_normalized = pd.DataFrame(normalized_features, columns=['X1', 'X2', 'X3', 'X4', 'X5'])
+data_normalized['Y'] = data['Y']
+
+# Fit multiple linear regression model
+X = data_normalized[['X1', 'X2', 'X3', 'X4', 'X5']]
+X = sm.add_constant(X)  # Adds a constant term to the predictor
+model_normalized = sm.OLS(data_normalized['Y'], X).fit()
+
+# Summary of the regression model
+summary_normalized = model_normalized.summary()
+print(summary_normalized)
+
+# Extract coefficients and confidence intervals
+coef_normalized = model_normalized.params
+conf_normalized = model_normalized.conf_int()
+conf_normalized['coef'] = coef_normalized
+
+# Plot effect sizes with confidence intervals
+plt.figure(figsize=(10, 6))
+plt.errorbar(conf_normalized.index, conf_normalized['coef'], yerr=(conf_normalized[1] - conf_normalized[0]) / 2, fmt='o', capsize=5)
+plt.axhline(y=0, color='gray', linestyle='--')
+plt.xlabel('Variables')
+plt.ylabel('Normalized Coefficient')
+plt.title('Effect Sizes with Confidence Intervals (Normalized Features)')
+plt.show()
+
+# Extract coefficients and confidence intervals
+coef_normalized = model_normalized.params
+conf_normalized = model_normalized.conf_int()
+conf_normalized['coef'] = coef_normalized
+
+# Plot effect sizes with confidence intervals
+plt.figure(figsize=(10, 6))
+plt.errorbar(conf_normalized.index, conf_normalized['coef'], yerr=(conf_normalized[1] - conf_normalized[0]) / 2, fmt='o', capsize=5)
+plt.axhline(y=0, color='gray', linestyle='--')
+plt.xlabel('Variables')
+plt.ylabel('Normalized Coefficient')
+plt.title('Effect Sizes with Confidence Intervals (Normalized Features)')
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 import numpy as np
