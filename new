@@ -1,5 +1,52 @@
 
 
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
+import matplotlib.pyplot as plt
+
+# Set seed for reproducibility
+np.random.seed(42)
+
+# Generate toy data
+n_samples = 100
+X1 = np.random.normal(0, 1, n_samples) * 100  # Variable with large effect and large magnitude
+X2 = np.random.normal(0, 1, n_samples) * 0.1
+X3 = np.random.normal(0, 1, n_samples) * 50
+X4 = np.random.normal(0, 1, n_samples) * 10
+X5 = np.random.normal(0, 1, n_samples) * 0.5
+
+# Generate outcome variable with X1 having a large effect
+Y = 10 * X1 + 2 * X2 + 0.5 * X3 + 1 * X4 + 0.1 * X5 + np.random.normal(0, 1, n_samples)
+
+# Create a DataFrame
+data = pd.DataFrame({'Y': Y, 'X1': X1, 'X2': X2, 'X3': X3, 'X4': X4, 'X5': X5})
+
+# Standardize the variables
+data_standardized = (data - data.mean()) / data.std()
+
+# Fit multiple linear regression model
+X = data_standardized[['X1', 'X2', 'X3', 'X4', 'X5']]
+X = sm.add_constant(X)  # Adds a constant term to the predictor
+model = sm.OLS(data_standardized['Y'], X).fit()
+
+# Summary of the regression model
+summary = model.summary()
+print(summary)
+
+# Extract coefficients and confidence intervals
+coef = model.params
+conf = model.conf_int()
+conf['coef'] = coef
+
+# Plot effect sizes with confidence intervals
+plt.figure(figsize=(10, 6))
+plt.errorbar(conf.index, conf['coef'], yerr=(conf[1] - conf[0]) / 2, fmt='o', capsize=5)
+plt.axhline(y=0, color='gray', linestyle='--')
+plt.xlabel('Variables')
+plt.ylabel('Standardized Coefficient')
+plt.title('Effect Sizes with Confidence Intervals')
+plt.show()
 
 
 
