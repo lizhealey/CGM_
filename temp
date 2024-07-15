@@ -1,3 +1,60 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Define a function to generate sample sine wave data
+def generate_sine_wave_data(num_samples, seq_len, num_features):
+    x = np.linspace(0, 50, seq_len)
+    data = []
+    for _ in range(num_samples):
+        noise = np.random.normal(0, 0.1, size=seq_len)
+        sine_wave = np.sin(x) + noise
+        data.append(sine_wave)
+    data = np.array(data).reshape(num_samples, seq_len, num_features)
+    return data
+
+# Generate sample data
+num_samples = 100
+seq_len = 20
+num_features = 1
+
+data = generate_sine_wave_data(num_samples, seq_len, num_features)
+data = torch.tensor(data, dtype=torch.float32)
+
+# Instantiate the autoencoder
+autoencoder = Autoencoder(input_size, hidden_size, latent_size, seq_len)
+
+# Loss function and optimizer
+criterion = nn.MSELoss()
+optimizer = optim.Adam(autoencoder.parameters(), lr=0.001)
+
+# Training loop
+num_epochs = 100
+for epoch in range(num_epochs):
+    optimizer.zero_grad()
+    output = autoencoder(data)
+    loss = criterion(output, data)
+    loss.backward()
+    optimizer.step()
+    if (epoch + 1) % 10 == 0:
+        print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}')
+
+# Get a sample input and its reconstruction
+sample_input = data[0].unsqueeze(0)
+sample_output = autoencoder(sample_input).detach().numpy().squeeze()
+
+# Plot the original and reconstructed time series
+plt.figure(figsize=(12, 6))
+plt.plot(sample_input.numpy().squeeze(), label='Original')
+plt.plot(sample_output, label='Reconstructed')
+plt.legend()
+plt.title('Original vs Reconstructed Time Series')
+plt.xlabel('Time Step')
+plt.ylabel('Value')
+plt.show()
+
+
+
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
