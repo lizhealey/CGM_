@@ -1,0 +1,66 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+# Define the Encoder class
+class Encoder(nn.Module):
+    def __init__(self, input_size, hidden_size, latent_size):
+        super(Encoder, self).__init__()
+        self.lstm = nn.LSTM(input_size, hidden_size, batch_first=True)
+        self.fc = nn.Linear(hidden_size, latent_size)
+    
+    def forward(self, x):
+        _, (h, _) = self.lstm(x)
+        latent = self.fc(h[-1])
+        return latent
+
+# Define the Decoder class
+class Decoder(nn.Module):
+    def __init__(self, latent_size, hidden_size, output_size):
+        super(Decoder, self).__init__()
+        self.fc = nn.Linear(latent_size, hidden_size)
+        self.lstm = nn.LSTM(hidden_size, output_size, batch_first=True)
+    
+    def forward(self, x, seq_len):
+        hidden = self.fc(x).unsqueeze(0)
+        hidden = hidden.repeat(1, seq_len, 1)
+        output, _ = self.lstm(hidden)
+        return output
+
+# Define the Autoencoder class that combines Encoder and Decoder
+class Autoencoder(nn.Module):
+    def __init__(self, input_size, hidden_size, latent_size, seq_len):
+        super(Autoencoder, self).__init__()
+        self.encoder = Encoder(input_size, hidden_size, latent_size)
+        self.decoder = Decoder(latent_size, hidden_size, input_size)
+        self.seq_len = seq_len
+    
+    def forward(self, x):
+        latent = self.encoder(x)
+        reconstructed = self.decoder(latent, self.seq_len)
+        return reconstructed
+
+# Hyperparameters
+input_size = 1  # Number of features in the input
+hidden_size = 64  # Number of features in the hidden state
+latent_size = 32  # Size of the latent vector
+seq_len = 20  # Length of the input sequences
+
+# Instantiate the autoencoder
+autoencoder = Autoencoder(input_size, hidden_size, latent_size, seq_len)
+
+# Loss function and optimizer
+criterion = nn.MSELoss()
+optimizer = optim.Adam(autoencoder.parameters(), lr=0.001)
+
+# Dummy input data (batch_size, seq_len, input_size)
+data = torch.randn(10, seq_len, input_size)
+
+# Training loop (for demonstration purposes, here we use only one epoch)
+for epoch in range(1):
+    optimizer.zero_grad()
+    output = autoencoder(data)
+    loss = criterion(output, data)
+    loss.backward()
+    optimizer.step()
+    print(f'Epoch [{epoch+1}], Loss: {loss.item():.4f}')
